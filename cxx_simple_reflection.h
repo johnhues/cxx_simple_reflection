@@ -10,30 +10,13 @@
 //------------------------------------------------------------------------------
 // NewFnT
 //------------------------------------------------------------------------------
-template < typename T >
-void* NewFnT()
-{
-	return new T();
-}
+template < typename T > void* NewFnT() { return new T(); }
 typedef void* (*NewFn)();
-
-//------------------------------------------------------------------------------
-// GetClassByName()
-//------------------------------------------------------------------------------
-std::map< std::string, class Class* > s_classes;
-const class Class* GetClassByName( const char* name )
-{
-	auto iter = s_classes.find( name );
-	if ( iter != s_classes.end() )
-	{
-		return iter->second;
-	}
-	return nullptr;
-}
 
 //------------------------------------------------------------------------------
 // Class
 //------------------------------------------------------------------------------
+std::map< std::string, class Class* > s_classes;
 class Class
 {
 public:
@@ -46,32 +29,8 @@ public:
 	
 	std::string name;
 	NewFn newFn = nullptr;
-	std::vector< const class Var* > vars;
+	std::map< std::string, const class Var* > vars;
 };
-
-//------------------------------------------------------------------------------
-// BasicType
-//------------------------------------------------------------------------------
-enum class BasicType
-{
-	None,
-	Int32,
-	Float,
-	// Others...
-};
-inline std::ostream& operator<<( std::ostream& os, BasicType t )
-{
-	switch ( t )
-	{
-		case BasicType::None: return ( os << "None" );
-		case BasicType::Int32: return ( os << "Int32" );
-		case BasicType::Float: return ( os << "Float" );
-		default: return ( os << "" );
-	}
-}
-template < typename T > BasicType GetBasicType() { return BasicType::None; }
-template <> BasicType GetBasicType< int32_t >() { return BasicType::Int32; }
-template <> BasicType GetBasicType< float >() { return BasicType::Float; }
 
 //------------------------------------------------------------------------------
 // Var
@@ -79,21 +38,75 @@ template <> BasicType GetBasicType< float >() { return BasicType::Float; }
 class Var
 {
 public:
-	Var( Class* c, const char* name, int32_t varOffset, BasicType basicType ) :
+	Var( Class* c, const char* name, int32_t varOffset, const class BasicType* basicType ) :
 		name( name ),
 		varOffset( varOffset ),
 		basicType( basicType )
 	{
-		c->vars.push_back( this );
+		c->vars[ name ] = this;
 	}
 	
 	std::string name;
 	int32_t varOffset = 0;
-	BasicType basicType = BasicType::None;
+	const class BasicType* basicType = nullptr;
 };
+
+//------------------------------------------------------------------------------
+// BasicType
+//------------------------------------------------------------------------------
+class BasicType
+{
+public:
+	virtual const char* GetName() const = 0;
+	virtual void SetValueByString( void* value, const char* str ) const = 0;
+	virtual std::string GetValueAsString( const void* value ) const = 0;
+};
+template < typename T > const BasicType* GetBasicType();
+
+#define REGISTER_BASIC_TYPE( _t, _fromStr, _toStr )\
+class BasicType_##_t : public BasicType { public:\
+	const char* GetName() const override { return #_t; }\
+	void SetValueByString( void* value, const char* str ) const override { *(_t*)value = _fromStr( str ); }\
+	std::string GetValueAsString( const void* value ) const override { return _toStr( *(_t*)value ); }\
+};\
+template <> const BasicType* GetBasicType< _t >() { static BasicType_##_t s_basicType; return &s_basicType; }
+
+REGISTER_BASIC_TYPE( int32_t,
+	[]( const char* s ){ return atoi( s ); },
+	[]( int32_t i ){ return std::to_string( i ); }
+);
+REGISTER_BASIC_TYPE( float,
+	[]( const char* s ){ return atof( s ); },
+	[]( float f ){ return std::to_string( f ); }
+);
 
 //------------------------------------------------------------------------------
 // Macros
 //------------------------------------------------------------------------------
 #define REGISTER_CLASS( _c ) Class meta_##_c = Class( #_c, &NewFnT< _c > )
 #define REGISTER_CLASS_VAR( _c, _v ) Var meta_##_c_##_v = Var( &meta_##_c, #_v, offsetof( _c, _v ), GetBasicType< decltype(_c::_v) >() )
+
+//------------------------------------------------------------------------------
+// GetClassByName()
+//------------------------------------------------------------------------------
+inline const class Class* GetClassByName( const char* name )
+{
+	auto iter = s_classes.find( name );
+	return ( iter != s_classes.end() ) ? iter->second : nullptr;
+}
+
+//------------------------------------------------------------------------------
+// SetVar()
+//------------------------------------------------------------------------------
+inline void SetVar( const Class* c, void* object, const char* varName, const char* value )
+{
+	if ( object )
+	{
+		auto iter = c->vars.find( varName );
+		if ( iter != c->vars.end() )
+		{
+			const class Var* var = iter->second;
+			var->basicType->SetValueByString( ( (uint8_t*)object + var->varOffset ), value );
+		}
+	}
+}
