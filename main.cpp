@@ -1,4 +1,3 @@
-#define CXX_SIMPLE_REFLECTION_MAIN
 #include "cxx_simple_reflection.h"
 #include "aether.h"
 
@@ -62,7 +61,7 @@ int main()
 	AE_INFO( "somethingElse->thingInt: #", somethingElse->thingInt );
 	AE_INFO( "somethingElse->thingFloat: #", somethingElse->thingFloat );
 	
-	// @TODO: inheritence
+	// @TODO: Inheritence
 	
 	AE_INFO( "done!" );
 	return 0;
